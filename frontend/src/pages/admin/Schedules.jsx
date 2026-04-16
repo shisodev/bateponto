@@ -39,6 +39,14 @@ const defaultWeekly = WEEKLY_DAYS.reduce((acc, d) => {
 
 const emptyDayForm = { start_time: '08:00', end_time: '17:00', break_start: '', break_end: '', notes: '' }
 const emptyTplForm = { name: '', start_time: '08:00', end_time: '17:00', break_start: '', break_end: '' }
+const MONTH_NAMES = [
+  { value: 1, label: 'Janeiro' }, { value: 2, label: 'Fevereiro' },
+  { value: 3, label: 'Março' },   { value: 4, label: 'Abril' },
+  { value: 5, label: 'Maio' },    { value: 6, label: 'Junho' },
+  { value: 7, label: 'Julho' },   { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Setembro' },{ value: 10, label: 'Outubro' },
+  { value: 11, label: 'Novembro' },{ value: 12, label: 'Dezembro' },
+]
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +77,8 @@ export default function AdminSchedules() {
     templateId: '',
     weekdays: [1, 2, 3, 4, 5],
     replaceExisting: false,
+    applyMonth: new Date().getMonth() + 1,
+    applyYear: new Date().getFullYear(),
   })
   const [applying, setApplying] = useState(false)
   const [applyFeedback, setApplyFeedback] = useState(null) // { type: 'success'|'error', message }
@@ -150,13 +160,14 @@ export default function AdminSchedules() {
       const { data } = await api.post('/daily-schedules/apply-template', {
         user_id: selectedUser,
         template_id: applyPanel.templateId,
-        month: month + 1,
-        year,
+        month: applyPanel.applyMonth,
+        year: applyPanel.applyYear,
         weekdays: applyPanel.weekdays,
         replace_existing: applyPanel.replaceExisting,
       })
       setApplyFeedback({ type: 'success', message: data.message })
       setTimeout(() => setApplyFeedback(null), 6000)
+      setCurrentDate(new Date(applyPanel.applyYear, applyPanel.applyMonth - 1, 1))
       await fetchEntries()
     } catch (err) {
       setApplyFeedback({ type: 'error', message: err.response?.data?.error || 'Erro ao aplicar modelo' })
@@ -392,6 +403,41 @@ export default function AdminSchedules() {
                     )}
                   </div>
 
+                  {/* Mês e Ano */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">
+                      Mês de aplicação
+                    </label>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <select
+                        value={applyPanel.applyMonth}
+                        onChange={e => {
+                          const m = parseInt(e.target.value)
+                          setApplyPanel(p => ({ ...p, applyMonth: m }))
+                          setCurrentDate(new Date(applyPanel.applyYear, m - 1, 1))
+                        }}
+                        className="input-field w-40">
+                        {MONTH_NAMES.map(({ value, label }) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        value={applyPanel.applyYear}
+                        min={2020}
+                        max={2099}
+                        onChange={e => {
+                          const y = parseInt(e.target.value)
+                          if (!isNaN(y)) {
+                            setApplyPanel(p => ({ ...p, applyYear: y }))
+                            setCurrentDate(new Date(y, applyPanel.applyMonth - 1, 1))
+                          }
+                        }}
+                        className="input-field w-24"
+                      />
+                    </div>
+                  </div>
+
                   {/* Dias da semana */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">
@@ -454,7 +500,7 @@ export default function AdminSchedules() {
                     }
                     {applying
                       ? 'Aplicando...'
-                      : `Aplicar em ${format(currentDate, 'MMMM yyyy', { locale: ptBR })}`
+                      : `Aplicar em ${MONTH_NAMES.find(m => m.value === applyPanel.applyMonth)?.label} ${applyPanel.applyYear}`
                     }
                   </button>
                 </div>
