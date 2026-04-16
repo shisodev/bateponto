@@ -39,6 +39,53 @@ router.get('/user/:userId', authenticateToken, requireAdmin, (req, res) => {
   res.json(entries);
 });
 
+// Admin aplica um modelo de escala no mês de um funcionário
+router.post('/apply-template', authenticateToken, requireAdmin, (req, res) => {
+  const { user_id, template_id, month, year, weekdays, replace_existing } = req.body;
+
+  if (!user_id || !template_id || !month || !year || !Array.isArray(weekdays)) {
+    return res.status(400).json({ error: 'user_id, template_id, month, year e weekdays são obrigatórios' });
+  }
+
+  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
+  if (!user) return res.status(404).json({ error: 'Funcionário não encontrado' });
+
+  const template = db.prepare('SELECT * FROM schedule_templates WHERE id = ?').get(template_id);
+  if (!template) return res.status(404).json({ error: 'Modelo não encontrado' });
+
+  const m = parseInt(month);
+  const y = parseInt(year);
+  const daysInMonth = new Date(y, m, 0).getDate(); // dia 0 do mês seguinte = último dia do mês atual
+  const mPad = String(m).padStart(2, '0');
+
+  let count = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(y, m - 1, d).getDay(); // 0=Dom, 1=Seg, ..., 6=Sáb
+    if (!weekdays.includes(dow)) continue;
+
+    const dateStr = `${y}-${mPad}-${String(d).padStart(2, '0')}`;
+    const existing = db.prepare(
+      'SELECT id FROM daily_schedules WHERE user_id = ? AND date = ?'
+    ).get(user_id, dateStr);
+
+    if (existing) {
+      if (!replace_existing) continue;
+      db.prepare(`
+        UPDATE daily_schedules SET start_time = ?, end_time = ?, break_start = ?, break_end = ?
+        WHERE id = ?
+      `).run(template.start_time, template.end_time, template.break_start || null, template.break_end || null, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO daily_schedules (user_id, date, start_time, end_time, break_start, break_end)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(user_id, dateStr, template.start_time, template.end_time, template.break_start || null, template.break_end || null);
+    }
+    count++;
+  }
+
+  res.json({ message: `${count} ${count === 1 ? 'dia atualizado' : 'dias atualizados'} com o modelo "${template.name}"` });
+});
+
 // Admin cria múltiplas entradas (bulk) — deve vir antes de POST /
 router.post('/bulk', authenticateToken, requireAdmin, (req, res) => {
   const { user_id, entries } = req.body;
