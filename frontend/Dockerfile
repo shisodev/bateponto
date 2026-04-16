@@ -7,7 +7,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN ./node_modules/.bin/vite build
 
 # Estágio 2: servidor nginx com os arquivos estáticos
 FROM nginx:alpine
