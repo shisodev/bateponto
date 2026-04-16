@@ -149,6 +149,20 @@ db.run(`CREATE TABLE IF NOT EXISTS activity_logs (
   timestamp TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 )`);
 
+db.run(`CREATE TABLE IF NOT EXISTS daily_schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  break_start TEXT,
+  break_end TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE(user_id, date)
+)`);
+
 // Cria o administrador padrão se não existir
 const adminExists = db.get('SELECT id FROM users WHERE username = ?', ['admin']);
 if (!adminExists) {

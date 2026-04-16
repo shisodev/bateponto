@@ -12,6 +12,7 @@ const scheduleRoutes = require('./routes/schedules');
 const adjustmentRoutes = require('./routes/adjustments');
 const reportRoutes = require('./routes/reports');
 const notificationRoutes = require('./routes/notifications');
+const dailyScheduleRoutes = require('./routes/dailySchedules');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +32,7 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/adjustments', adjustmentRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/daily-schedules', dailyScheduleRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'MG Bate-Ponto API funcionando!' });

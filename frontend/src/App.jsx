@@ -17,6 +17,7 @@ import AdminReports from './pages/admin/Reports'
 // Employee pages
 import EmployeeDashboard from './pages/employee/Dashboard'
 import EmployeeHistory from './pages/employee/History'
+import EmployeeSchedule from './pages/employee/Schedule'
 import EmployeeAdjustments from './pages/employee/AdjustmentRequest'
 
 function RequireAuth({ children, adminOnly = false }) {
@@ -63,6 +64,7 @@ export default function App() {
           }>
             <Route index element={<EmployeeDashboard />} />
             <Route path="history" element={<EmployeeHistory />} />
+            <Route path="schedule" element={<EmployeeSchedule />} />
             <Route path="adjustments" element={<EmployeeAdjustments />} />
           </Route>
 

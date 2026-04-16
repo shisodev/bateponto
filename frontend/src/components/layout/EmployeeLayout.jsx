@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import api from '../../services/api'
-import { Clock, History, FileEdit, LogOut, Bell, Sparkles, Menu, X } from 'lucide-react'
+import { Clock, History, FileEdit, CalendarDays, LogOut, Bell, Sparkles, Menu, X } from 'lucide-react'
 
 const navItems = [
   { to: '/employee', label: 'Bater Ponto', icon: Clock, end: true },
   { to: '/employee/history', label: 'Histórico', icon: History },
+  { to: '/employee/schedule', label: 'Escala', icon: CalendarDays },
   { to: '/employee/adjustments', label: 'Solicitar Ajuste', icon: FileEdit },
 ]
 
