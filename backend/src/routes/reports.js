@@ -46,6 +46,20 @@ function calcHoursWorked(records) {
   return { total_minutes: Math.round(totalMinutes), hours, minutes, formatted: `${hours}h ${minutes.toString().padStart(2, '0')}m` };
 }
 
+function minToFormatted(min) {
+  const abs = Math.abs(Math.round(min));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const sign = min < 0 ? '-' : '+';
+  return `${sign}${h}h ${m.toString().padStart(2, '0')}m`;
+}
+
+function timeToMin(str) {
+  if (!str) return 0;
+  const parts = str.slice(0, 5).split(':').map(Number);
+  return (parts[0] || 0) * 60 + (parts[1] || 0);
+}
+
 // Espelho de ponto por funcionário e período
 router.get('/mirror', authenticateToken, (req, res) => {
   const { user_id, start_date, end_date } = req.query;
@@ -151,6 +165,144 @@ router.get('/present-today', authenticateToken, requireAdmin, (req, res) => {
   `).all(today);
 
   res.json(records);
+});
+
+// Banco de horas — por funcionário e período
+router.get('/bank-hours', authenticateToken, (req, res) => {
+  const { user_id, start_date, end_date } = req.query;
+  const targetUserId = req.user.role === 'admin' ? (user_id || req.user.id) : req.user.id;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'Informe o período (start_date e end_date)' });
+  }
+
+  const user = db.prepare('SELECT id, full_name, username FROM users WHERE id = ?').get(targetUserId);
+  if (!user) return res.status(404).json({ error: 'Funcionário não encontrado' });
+
+  // Escalas, registros e ajustes aprovados no período
+  const schedules = db.prepare(`
+    SELECT * FROM daily_schedules
+    WHERE user_id = ? AND date >= ? AND date <= ?
+    ORDER BY date ASC
+  `).all(targetUserId, start_date, end_date);
+
+  const allRecords = db.prepare(`
+    SELECT * FROM time_records
+    WHERE user_id = ? AND date >= ? AND date <= ?
+    ORDER BY timestamp ASC
+  `).all(targetUserId, start_date, end_date);
+
+  const approvedAdjustments = db.prepare(`
+    SELECT * FROM adjustment_requests
+    WHERE user_id = ? AND date >= ? AND date <= ? AND status = 'approved'
+    ORDER BY date ASC
+  `).all(targetUserId, start_date, end_date);
+
+  // Agrupar por data
+  const recordsByDate = {};
+  for (const r of allRecords) {
+    if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
+    recordsByDate[r.date].push(r);
+  }
+
+  const adjustmentsByDate = {};
+  for (const a of approvedAdjustments) {
+    if (!adjustmentsByDate[a.date]) adjustmentsByDate[a.date] = [];
+    adjustmentsByDate[a.date].push(a);
+  }
+
+  const WEEKDAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+  const days = schedules.map(schedule => {
+    const dayRecords = (recordsByDate[schedule.date] || [])
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const dayAdjustments = adjustmentsByDate[schedule.date] || [];
+
+    // Horas esperadas pela escala
+    const schedStart = timeToMin(schedule.start_time);
+    const schedEnd   = timeToMin(schedule.end_time);
+    let expectedMin  = schedEnd - schedStart;
+    if (schedule.break_start && schedule.break_end) {
+      expectedMin -= (timeToMin(schedule.break_end) - timeToMin(schedule.break_start));
+    }
+    expectedMin = Math.max(0, expectedMin);
+
+    // Atestado = ajuste aprovado com "atestado" no motivo ou na obs. do admin
+    const isAtestado = dayAdjustments.some(a =>
+      (a.reason      && a.reason.toLowerCase().includes('atestado')) ||
+      (a.admin_notes && a.admin_notes.toLowerCase().includes('atestado'))
+    );
+
+    const hasApprovedAdj = dayAdjustments.length > 0;
+
+    // Horas trabalhadas
+    const worked    = calcHoursWorked(dayRecords);
+    const workedMin = worked.total_minutes;
+
+    const entradaRec = dayRecords.find(r => r.type === 'entrada');
+    const saidaRec   = [...dayRecords].reverse().find(r => r.type === 'saida');
+
+    // Dia da semana (usa meio-dia para evitar DST)
+    const dow = new Date(schedule.date + 'T12:00:00').getDay();
+
+    let balanceMin, observation;
+    if (isAtestado) {
+      observation = 'Atestado';
+      balanceMin  = 0;
+    } else if (dayRecords.length === 0) {
+      observation = 'Falta';
+      balanceMin  = -expectedMin;
+    } else if (hasApprovedAdj) {
+      observation = 'Ajuste Aprovado';
+      balanceMin  = workedMin - expectedMin;
+    } else {
+      observation = 'Normal';
+      balanceMin  = workedMin - expectedMin;
+    }
+
+    return {
+      date:      schedule.date,
+      weekday:   WEEKDAY_NAMES[dow],
+      schedule: {
+        start_time:  schedule.start_time.slice(0, 5),
+        end_time:    schedule.end_time.slice(0, 5),
+        break_start: schedule.break_start ? schedule.break_start.slice(0, 5) : null,
+        break_end:   schedule.break_end   ? schedule.break_end.slice(0, 5)   : null,
+      },
+      entry_time:        entradaRec ? entradaRec.timestamp.slice(11, 16) : null,
+      exit_time:         saidaRec   ? saidaRec.timestamp.slice(11, 16)   : null,
+      records:           dayRecords,
+      expected_minutes:  Math.round(expectedMin),
+      expected_formatted:`${Math.floor(expectedMin / 60)}h ${Math.round(expectedMin % 60).toString().padStart(2, '0')}m`,
+      worked_minutes:    workedMin,
+      worked_formatted:  worked.formatted,
+      balance_minutes:   Math.round(balanceMin),
+      balance_formatted: minToFormatted(balanceMin),
+      observation,
+      has_approved_adjustment: hasApprovedAdj,
+    };
+  });
+
+  const totalExpMin = days.reduce((s, d) => s + d.expected_minutes, 0);
+  const totalWrkMin = days.reduce((s, d) => s + d.worked_minutes,   0);
+  const totalBalMin = days.reduce((s, d) => s + d.balance_minutes,  0);
+
+  res.json({
+    user,
+    period: { start_date, end_date },
+    days,
+    summary: {
+      total_scheduled_days:     days.length,
+      total_worked_days:        days.filter(d => d.records.length > 0).length,
+      total_absences:           days.filter(d => d.observation === 'Falta').length,
+      total_expected_minutes:   Math.round(totalExpMin),
+      total_expected_formatted: `${Math.floor(totalExpMin / 60)}h ${Math.round(totalExpMin % 60).toString().padStart(2, '0')}m`,
+      total_worked_minutes:     Math.round(totalWrkMin),
+      total_worked_formatted:   `${Math.floor(totalWrkMin / 60)}h ${Math.round(totalWrkMin % 60).toString().padStart(2, '0')}m`,
+      balance_minutes:          Math.round(totalBalMin),
+      balance_formatted:        minToFormatted(totalBalMin),
+    }
+  });
 });
 
 module.exports = router;
