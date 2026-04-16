@@ -1,15 +1,13 @@
-# Estágio 1: build
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci && chmod +x ./node_modules/.bin/vite
 
 COPY . .
 RUN ./node_modules/.bin/vite build
 
-# Estágio 2: servidor nginx com os arquivos estáticos
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
