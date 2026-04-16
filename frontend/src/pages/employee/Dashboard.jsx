@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react'
 import api from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { LogIn, LogOut, Coffee, Play, CheckCircle, Clock } from 'lucide-react'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 
 const BUTTONS = [
   {
@@ -62,21 +60,39 @@ const typeLabels = {
   fim_pausa: { label: 'Fim Pausa', icon: '🔵' },
 }
 
+const TZ = 'America/Sao_Paulo'
+
+function getLocalTime() {
+  return new Date().toLocaleString('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+}
+
+function getLocalDateLabel() {
+  return new Date().toLocaleDateString('pt-BR', { timeZone: TZ, weekday: 'long', day: '2-digit', month: 'long' })
+}
+
 function LiveClock() {
-  const [time, setTime] = useState(new Date())
+  const [timeStr, setTimeStr] = useState(getLocalTime())
+  const [dateStr, setDateStr] = useState(getLocalDateLabel())
   useEffect(() => {
-    const t = setInterval(() => setTime(new Date()), 1000)
+    const t = setInterval(() => {
+      setTimeStr(getLocalTime())
+      setDateStr(getLocalDateLabel())
+    }, 1000)
     return () => clearInterval(t)
   }, [])
+
+  const [hhmm, ss] = timeStr.split(':').length === 3
+    ? [timeStr.slice(0, 5), timeStr.slice(6, 8)]
+    : [timeStr, '00']
 
   return (
     <div className="text-center">
       <div className="font-display text-5xl font-bold tracking-tight text-gray-800">
-        {format(time, 'HH:mm')}
-        <span className="text-rose-400">:{format(time, 'ss')}</span>
+        {hhmm}
+        <span className="text-rose-400">:{ss}</span>
       </div>
       <p className="text-gray-500 text-sm mt-1 capitalize">
-        {format(time, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+        {dateStr}
       </p>
     </div>
   )

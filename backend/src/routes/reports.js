@@ -4,6 +4,13 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Retorna a data local (não UTC) no formato YYYY-MM-DD
+function getLocalDate() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
 function calcHoursWorked(records) {
   let totalMinutes = 0;
   let entradaTime = null;
@@ -98,7 +105,7 @@ router.get('/mirror', authenticateToken, (req, res) => {
 
 // Dashboard stats (admin)
 router.get('/dashboard', authenticateToken, requireAdmin, (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const totalEmployees = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'employee' AND active = 1").get();
   const todayRecords = db.prepare("SELECT COUNT(DISTINCT user_id) as count FROM time_records WHERE date = ?").get(today);
@@ -129,7 +136,7 @@ router.get('/dashboard', authenticateToken, requireAdmin, (req, res) => {
 
 // Funcionários presentes hoje
 router.get('/present-today', authenticateToken, requireAdmin, (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const records = db.prepare(`
     SELECT u.id, u.full_name,
